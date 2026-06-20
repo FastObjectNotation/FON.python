@@ -1,0 +1,84 @@
+name: Release
+
+# Trigger: push a tag matching v0.x.y
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+# Note on distribution:
+#   GitHub Packages does not host a pip-installable registry, so wheels are
+#   attached directly to the GitHub Release. Users can install with:
+#     pip install https://github.com/FastObjectNotation/FON.python/releases/download/v0.2.1/fon-0.2.1-cp313-cp313-win_amd64.whl
+#
+#   For multi-platform wheels (manylinux, macOS universal2, Windows), the
+#   recommended path is cibuildwheel (https://cibuildwheel.pypa.io), which
+#   runs inside CIs Docker containers. The job below uses cibuildwheel to
+#   produce wheels for all major platforms in a single workflow run.
+
+jobs:
+  build-wheels:
+    name: Build wheels (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Rust (needed inside cibuildwheel containers)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build native library (pre-build for the host before cibuildwheel)
+        run: cargo build --release --manifest-path native/Cargo.toml
+
+      - name: Build wheels with cibuildwheel
+        uses: pypa/cibuildwheel@v2.21.3
+        env:
+          # Build for CPython 3.9 through 3.13.
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
+          # Skip 32-bit builds and PyPy.
+          CIBW_SKIP: "*-win32 *-manylinux_i686 pp*"
+          # Before each wheel build inside the container, rebuild the native lib.
+          CIBW_BEFORE_BUILD: "cargo build --release --manifest-path {project}/native/Cargo.toml"
+          # Copy the built .so/.dll/.dylib into the fon/ package directory so
+          # the wheel contains it bundled alongside __init__.py.
+          CIBW_BEFORE_BUILD_LINUX: >
+            cargo build --release --manifest-path {project}/native/Cargo.toml &&
+            cp {project}/native/target/release/libfon_native.so {project}/fon/
+          CIBW_BEFORE_BUILD_MACOS: >
+            cargo build --release --manifest-path {project}/native/Cargo.toml &&
+            cp {project}/native/target/release/libfon_native.dylib {project}/fon/
+          CIBW_BEFORE_BUILD_WINDOWS: >
+            cargo build --release --manifest-path {project}/native/Cargo.toml &&
+            copy {project}\native\target\release\fon_native.dll {project}\fon\
+
+      - name: Upload wheel artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: wheelhouse/*.whl
+
+  create-release:
+    name: Create GitHub Release
+    needs: build-wheels
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: wheels
+          merge-multiple: true
+
+      - name: Create GitHub Release and attach wheels
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wheels/*.whl
+          generate_release_notes: true
