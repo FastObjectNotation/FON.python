@@ -1,0 +1,9 @@
+native/target/
+**/target/
+__pycache__/
+*.pyc
+build/
+dist/
+*.egg-info/
+/docs/
+.superpowers/
