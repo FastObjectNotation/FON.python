@@ -1,17 +1,22 @@
 """
 fon — Python bindings for the FON (Fast Object Notation) serialization library.
 
-Wraps the fon_native cdylib via ctypes. Core surface:
-  - native_version()       -> str
-  - FonCollection          — key/value map (add_int, add_long, add_double, add_bool, add_string,
-                              get_int, get_long, get_double, get_bool, get_string, serialize)
-  - FonDump                — id→collection store (add, get, size, serialize, deserialize classmethod)
-
-Deferred / not yet bound:
-  - fon_collection_add/get_int_array, add/get_float_array
-  - fon_collection_add/get_collection (nested objects)
-  - fon_collection_add/get_collection_array
-  - fon_serialize_to_file, fon_deserialize_from_file
+Wraps the fon_native cdylib via ctypes. Full C-ABI surface:
+  - native_version()                   -> str
+  - set_raw_unpack(bool)               — configure raw-unpack mode
+  - set_max_depth(int)                 — configure max nesting depth
+  - FonCollection                      — key/value map
+        Scalars:  add_int, add_long, add_float, add_double, add_bool, add_string
+                  get_int, get_long, get_float, get_double, get_bool, get_string
+        Arrays:   add_int_array / get_int_array (list[int])
+                  add_float_array / get_float_array (list[float])
+        Nested:   add_collection / get_collection  (ownership transfer on add)
+                  add_collection_array / get_collection_array
+        Misc:     serialize, FonCollection.deserialize(line)
+  - FonDump                            — id→collection store
+        add, get, size, serialize, FonDump.deserialize(text)
+        serialize_to_file(path)
+  - deserialize_dump_from_file(path)   -> FonDump  (module-level)
 """
 
 from __future__ import annotations
@@ -20,7 +25,7 @@ import ctypes
 import os
 import sys
 from ctypes import c_int32, c_int64, c_uint64, c_double, c_float, c_char_p, c_void_p, c_uint8
-from typing import Optional
+from typing import List, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +222,68 @@ _lib.fon_deserialize_collection_from_buffer.argtypes = [
 ]
 _lib.fon_deserialize_collection_from_buffer.restype = c_void_p
 
+# configuration
+_lib.fon_set_raw_unpack.argtypes = [c_int32]
+_lib.fon_set_raw_unpack.restype = None
+
+_lib.fon_set_max_depth.argtypes = [c_int32]
+_lib.fon_set_max_depth.restype = None
+
+# file I/O
+_lib.fon_serialize_to_file.argtypes = [c_void_p, c_char_p, c_int32, _err_p]
+_lib.fon_serialize_to_file.restype = c_int32
+
+_lib.fon_deserialize_from_file.argtypes = [c_char_p, c_int32, _err_p]
+_lib.fon_deserialize_from_file.restype = c_void_p
+
+# add_int_array / add_float_array
+_lib.fon_collection_add_int_array.argtypes = [
+    c_void_p, c_char_p, ctypes.POINTER(c_int32), c_int64, _err_p
+]
+_lib.fon_collection_add_int_array.restype = c_int32
+
+_lib.fon_collection_add_float_array.argtypes = [
+    c_void_p, c_char_p, ctypes.POINTER(c_float), c_int64, _err_p
+]
+_lib.fon_collection_add_float_array.restype = c_int32
+
+# get_int_array / get_float_array  (two-call: buffer=NULL → size; then fill)
+_lib.fon_collection_get_int_array.argtypes = [
+    c_void_p, c_char_p,
+    ctypes.POINTER(c_int32), c_int64, ctypes.POINTER(c_int64),
+    _err_p,
+]
+_lib.fon_collection_get_int_array.restype = c_int32
+
+_lib.fon_collection_get_float_array.argtypes = [
+    c_void_p, c_char_p,
+    ctypes.POINTER(c_float), c_int64, ctypes.POINTER(c_int64),
+    _err_p,
+]
+_lib.fon_collection_get_float_array.restype = c_int32
+
+# add_collection / get_collection
+_lib.fon_collection_add_collection.argtypes = [c_void_p, c_char_p, c_void_p, _err_p]
+_lib.fon_collection_add_collection.restype = c_int32
+
+_lib.fon_collection_get_collection.argtypes = [c_void_p, c_char_p, _err_p]
+_lib.fon_collection_get_collection.restype = c_void_p
+
+# add_collection_array / get_collection_array
+_lib.fon_collection_add_collection_array.argtypes = [
+    c_void_p, c_char_p,
+    ctypes.POINTER(c_void_p), c_int64,
+    _err_p,
+]
+_lib.fon_collection_add_collection_array.restype = c_int32
+
+_lib.fon_collection_get_collection_array.argtypes = [
+    c_void_p, c_char_p,
+    ctypes.POINTER(c_void_p), c_int64, ctypes.POINTER(c_int64),
+    _err_p,
+]
+_lib.fon_collection_get_collection_array.restype = c_int32
+
 
 # ---------------------------------------------------------------------------
 # Internal helpers
@@ -269,7 +336,7 @@ def _two_call_serialize_dump(handle: int, max_threads: int = 0) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# Public API — native_version()
+# Public API — native_version(), set_raw_unpack(), set_max_depth()
 # ---------------------------------------------------------------------------
 
 def native_version() -> str:
@@ -278,6 +345,50 @@ def native_version() -> str:
     if raw is None:
         return ""
     return raw.decode("utf-8")
+
+
+def set_raw_unpack(enable: bool) -> None:
+    """
+    Enable or disable raw-unpack mode for deserialization.
+
+    When enabled the deserializer treats raw bytes as literal values rather
+    than interpreting escape sequences.  Default is False.
+    """
+    _lib.fon_set_raw_unpack(c_int32(1 if enable else 0))
+
+
+def set_max_depth(depth: int) -> None:
+    """
+    Set the maximum nesting depth for deserialization.
+
+    Values below 1 are clamped to 1 by the native library.  Default is 64.
+    """
+    _lib.fon_set_max_depth(c_int32(depth))
+
+
+# ---------------------------------------------------------------------------
+# Module-level file I/O
+# ---------------------------------------------------------------------------
+
+def deserialize_dump_from_file(path: str, max_threads: int = 0) -> "FonDump":
+    """
+    Read a FON dump file from disk and return a new FonDump.
+
+    Parameters
+    ----------
+    path:
+        Absolute or relative file path (UTF-8).
+    max_threads:
+        Threading hint passed to the native library (0 = single-threaded).
+    """
+    err = _FonError()
+    handle = _lib.fon_deserialize_from_file(
+        path.encode("utf-8"), c_int32(max_threads), ctypes.byref(err)
+    )
+    if not handle:
+        err.raise_if_error()
+        raise FonError(FON_ERROR_FILE_NOT_FOUND, f"fon_deserialize_from_file returned null for: {path}")
+    return FonDump(_handle=handle)
 
 
 # ---------------------------------------------------------------------------
@@ -396,6 +507,76 @@ class FonCollection:
         if rc != FON_OK:
             err.raise_if_error()
 
+    def add_int_array(self, key: str, values: List[int]) -> None:
+        """Add an array of i32 values."""
+        self._require_alive()
+        count = len(values)
+        arr = (c_int32 * count)(*values)
+        err = _FonError()
+        rc = _lib.fon_collection_add_int_array(
+            self._handle, _encode_key(key), arr, c_int64(count), ctypes.byref(err)
+        )
+        if rc != FON_OK:
+            err.raise_if_error()
+
+    def add_float_array(self, key: str, values: List[float]) -> None:
+        """Add an array of f32 values."""
+        self._require_alive()
+        count = len(values)
+        arr = (c_float * count)(*values)
+        err = _FonError()
+        rc = _lib.fon_collection_add_float_array(
+            self._handle, _encode_key(key), arr, c_int64(count), ctypes.byref(err)
+        )
+        if rc != FON_OK:
+            err.raise_if_error()
+
+    def add_collection(self, key: str, child: "FonCollection") -> None:
+        """
+        Nest a child collection under key.
+
+        Ownership transfer: after this call the child handle is owned by this
+        collection.  The child FonCollection must not be used again.
+        """
+        self._require_alive()
+        if child._transferred:
+            raise RuntimeError(
+                "Cannot add an already-transferred FonCollection."
+            )
+        err = _FonError()
+        rc = _lib.fon_collection_add_collection(
+            self._handle, _encode_key(key), child._handle, ctypes.byref(err)
+        )
+        if rc != FON_OK:
+            err.raise_if_error()
+        child._transferred = True
+        child._owns = False
+
+    def add_collection_array(self, key: str, children: List["FonCollection"]) -> None:
+        """
+        Nest an array of child collections under key.
+
+        Ownership transfer: after this call every child handle is owned by this
+        collection.  None of the children must be used again.
+        """
+        self._require_alive()
+        for child in children:
+            if child._transferred:
+                raise RuntimeError(
+                    "Cannot add an already-transferred FonCollection."
+                )
+        count = len(children)
+        arr = (c_void_p * count)(*(c._handle for c in children))
+        err = _FonError()
+        rc = _lib.fon_collection_add_collection_array(
+            self._handle, _encode_key(key), arr, c_int64(count), ctypes.byref(err)
+        )
+        if rc != FON_OK:
+            err.raise_if_error()
+        for child in children:
+            child._transferred = True
+            child._owns = False
+
     # ---- get methods -------------------------------------------------------
 
     def get_int(self, key: str) -> int:
@@ -489,6 +670,110 @@ class FonCollection:
             raw = raw[:nul]
         return raw.decode("utf-8")
 
+    def get_int_array(self, key: str) -> List[int]:
+        """
+        Get an i32 array by key (two-call pattern: query size, then fill).
+        """
+        self._require_alive()
+        err = _FonError()
+        actual = c_int64(0)
+        # First call: buffer=NULL to query count.
+        rc = _lib.fon_collection_get_int_array(
+            self._handle, _encode_key(key), None, c_int64(0),
+            ctypes.byref(actual), ctypes.byref(err)
+        )
+        if rc != FON_OK:
+            err.raise_if_error()
+        count = actual.value
+        if count == 0:
+            return []
+        buf = (c_int32 * count)()
+        err = _FonError()
+        rc = _lib.fon_collection_get_int_array(
+            self._handle, _encode_key(key), buf, c_int64(count),
+            ctypes.byref(actual), ctypes.byref(err)
+        )
+        if rc != FON_OK:
+            err.raise_if_error()
+        return list(buf)
+
+    def get_float_array(self, key: str) -> List[float]:
+        """
+        Get an f32 array by key (two-call pattern: query size, then fill).
+        """
+        self._require_alive()
+        err = _FonError()
+        actual = c_int64(0)
+        rc = _lib.fon_collection_get_float_array(
+            self._handle, _encode_key(key), None, c_int64(0),
+            ctypes.byref(actual), ctypes.byref(err)
+        )
+        if rc != FON_OK:
+            err.raise_if_error()
+        count = actual.value
+        if count == 0:
+            return []
+        buf = (c_float * count)()
+        err = _FonError()
+        rc = _lib.fon_collection_get_float_array(
+            self._handle, _encode_key(key), buf, c_int64(count),
+            ctypes.byref(actual), ctypes.byref(err)
+        )
+        if rc != FON_OK:
+            err.raise_if_error()
+        return [float(v) for v in buf]
+
+    def get_collection(self, key: str) -> "FonCollection":
+        """
+        Get a borrowed handle to a nested collection under key.
+
+        The returned FonCollection is borrowed — do NOT free it or transfer it
+        to another collection or dump.
+        """
+        self._require_alive()
+        err = _FonError()
+        handle = _lib.fon_collection_get_collection(
+            self._handle, _encode_key(key), ctypes.byref(err)
+        )
+        if not handle:
+            err.raise_if_error()
+            raise FonError(
+                FON_ERROR_INVALID_ARGUMENT,
+                f"fon_collection_get_collection returned null for key: {key!r}",
+            )
+        return FonCollection(_handle=handle, _owns=False)
+
+    def get_collection_array(self, key: str) -> List["FonCollection"]:
+        """
+        Get borrowed handles to an array of nested collections under key.
+
+        The returned FonCollection objects are borrowed — do NOT free them or
+        transfer them to another collection or dump.
+        Uses the two-call pattern: first query count, then fill.
+        """
+        self._require_alive()
+        err = _FonError()
+        actual = c_int64(0)
+        # First call: buffer=NULL to query count.
+        rc = _lib.fon_collection_get_collection_array(
+            self._handle, _encode_key(key), None, c_int64(0),
+            ctypes.byref(actual), ctypes.byref(err)
+        )
+        if rc != FON_OK:
+            err.raise_if_error()
+        count = actual.value
+        if count == 0:
+            return []
+        buf = (c_void_p * count)()
+        err = _FonError()
+        rc = _lib.fon_collection_get_collection_array(
+            self._handle, _encode_key(key), buf, c_int64(count),
+            ctypes.byref(actual), ctypes.byref(err)
+        )
+        if rc != FON_OK:
+            err.raise_if_error()
+        return [FonCollection(_handle=buf[i], _owns=False) for i in range(count)]
+
     # ---- serialization -----------------------------------------------------
 
     def serialize(self) -> str:
@@ -581,6 +866,27 @@ class FonDump:
         """Serialize this dump to a multi-line FON string."""
         return _two_call_serialize_dump(self._handle, max_threads).decode("utf-8")
 
+    def serialize_to_file(self, path: str, max_threads: int = 0) -> None:
+        """
+        Write this dump to a file on disk.
+
+        Parameters
+        ----------
+        path:
+            Absolute or relative file path (UTF-8).
+        max_threads:
+            Threading hint passed to the native library (0 = single-threaded).
+        """
+        err = _FonError()
+        rc = _lib.fon_serialize_to_file(
+            self._handle,
+            path.encode("utf-8"),
+            c_int32(max_threads),
+            ctypes.byref(err),
+        )
+        if rc != FON_OK:
+            err.raise_if_error()
+
     @classmethod
     def deserialize(cls, text: str, max_threads: int = 0) -> "FonDump":
         """Parse a multi-line FON string and return a new FonDump."""
@@ -601,6 +907,9 @@ class FonDump:
 
 __all__ = [
     "native_version",
+    "set_raw_unpack",
+    "set_max_depth",
+    "deserialize_dump_from_file",
     "FonCollection",
     "FonDump",
     "FonError",
