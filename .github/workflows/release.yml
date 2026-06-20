@@ -9,7 +9,7 @@ on:
 # Note on distribution:
 #   GitHub Packages does not host a pip-installable registry, so wheels are
 #   attached directly to the GitHub Release. Users can install with:
-#     pip install https://github.com/FastObjectNotation/FON.python/releases/download/v0.2.1/fon-0.2.1-cp313-cp313-win_amd64.whl
+#     pip install https://github.com/FastObjectNotation/FON.python/releases/download/v0.3.0/fon-0.3.0-cp313-cp313-win_amd64.whl
 #
 #   For multi-platform wheels (manylinux, macOS universal2, Windows), the
 #   recommended path is cibuildwheel (https://cibuildwheel.pypa.io), which
