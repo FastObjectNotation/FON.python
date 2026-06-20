@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/FastObjectNotation/FON.python/actions/workflows/ci.yml/badge.svg)](https://github.com/FastObjectNotation/FON.python/actions/workflows/ci.yml)
 
-Python bindings for FON — a fast, human-readable, line-oriented serialization
-format. A compact alternative to JSON for record-style data. Each line is one
-record; values are typed and can nest.
+FON is a fast, human-readable, line-oriented serialization format. A compact
+alternative to JSON for record-style data. Each line is one record; values are
+typed and can nest.
 
 ## Features
 
@@ -15,8 +15,7 @@ record; values are typed and can nest.
 - **Parallel** dump serialization and deserialization.
 - **Byte-oriented parsing** — BOM tolerant, reads straight from bytes.
 - **Z85 binary encoding** for raw blobs.
-- **ctypes bindings** — no compiled extension module; loads the fon_native cdylib
-  directly.
+- **No compiled extension** — loads a bundled shared library automatically; no build step needed when installing from PyPI.
 
 ## Format
 
@@ -51,11 +50,11 @@ blob=r:"nm=QNzv..."
 ## Install
 
 ```bash
-pip install fon
+pip install FastObjectNotation
 ```
 
-> **Note:** The wheel bundles a pre-built `fon_native` shared library for the
-> target platform. See "Build" below if you need to build from source.
+> **Note:** The wheel bundles a pre-built shared library for the target platform.
+> See "Build" below if you need to build from source.
 
 ## Usage
 
@@ -103,7 +102,7 @@ print(entry.get_string("label"))  # row_0
 
 ```python
 from fon import native_version
-print(native_version())  # 0.2.1
+print(native_version())  # 0.3.0
 ```
 
 ## Build

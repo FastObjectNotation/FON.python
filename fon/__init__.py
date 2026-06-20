@@ -1,7 +1,9 @@
 """
-fon — Python bindings for the FON (Fast Object Notation) serialization library.
+fon — Fast Object Notation serialization for Python.
 
-Wraps the fon_native cdylib via ctypes. Full C-ABI surface:
+FON is a compact, human-readable, line-oriented format where each line is one
+record containing typed key/value pairs.  Public API:
+
   - native_version()                   -> str
   - set_raw_unpack(bool)               — configure raw-unpack mode
   - set_max_depth(int)                 — configure max nesting depth

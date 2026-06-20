@@ -3,9 +3,9 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.backends.legacy:build"
 
 [project]
-name = "fon"
-version = "0.2.1"
-description = "Python bindings for FON — Fast Object Notation serialization library"
+name = "FastObjectNotation"
+version = "0.3.0"
+description = "Fast Object Notation — a fast, human-readable serialization format"
 license = { text = "MIT" }
 readme = "README.md"
 requires-python = ">=3.9"
