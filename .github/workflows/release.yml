@@ -21,6 +21,7 @@ jobs:
     name: Build wheels (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
 
@@ -43,6 +44,10 @@ jobs:
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
           # Skip 32-bit builds and PyPy.
           CIBW_SKIP: "*-win32 *-manylinux_i686 pp*"
+          # The Linux wheels build inside manylinux containers that ship no Rust
+          # toolchain — install one before anything else and put cargo on PATH.
+          CIBW_BEFORE_ALL_LINUX: "curl https://sh.rustup.rs -sSf | sh -s -- -y --profile minimal --default-toolchain stable"
+          CIBW_ENVIRONMENT_LINUX: 'PATH="$HOME/.cargo/bin:$PATH"'
           # Before each wheel build inside the container, rebuild the native lib.
           CIBW_BEFORE_BUILD: "cargo build --release --manifest-path {project}/native/Cargo.toml"
           # Copy the built .so/.dll/.dylib into the fon/ package directory so
