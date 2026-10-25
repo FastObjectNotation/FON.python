@@ -13,7 +13,7 @@ from fon import FonCollection, FonDump, FonError, native_version
 class TestNativeVersion(unittest.TestCase):
     def test_version(self) -> None:
         """native_version() must match the library version."""
-        self.assertEqual(native_version(), "0.3.0")
+        self.assertEqual(native_version(), "0.4.0")
 
 
 class TestFonCollectionPrimitives(unittest.TestCase):

@@ -1,5 +1,5 @@
 """
-Extended tests covering the new C-ABI surface added in the second binding pass.
+Extended tests for less common paths through the public API.
 
 Run with:  python -m unittest discover -s tests
        or: python -m unittest tests.test_fon_extended
