@@ -17,7 +17,11 @@ A fast, human-readable, line-oriented serialization format — a compact alterna
 
 ## Format
 
-Each line is one record: a comma-separated list of `key=type:value` pairs. A `.fon` file is a sequence of records, indexed by line number (0-based).
+Each line is one record: a comma-separated list of `key=type:value` pairs. A `.fon` file is a sequence of records, indexed by line number (0-based), so an empty line is an empty record.
+
+Parsing is strict: malformed text is an error, never a guess. An integer with trailing characters, a bool other than `0` or `1`, a missing, doubled or trailing comma, a repeated key and an unknown escape are all rejected, and an error in a dump names the line (`line 12: ...`).
+
+Values are stored as given or not at all: a bool setter takes only `True` or `False` (`TypeError` otherwise), and a finite number outside the 32-bit float range raises `OverflowError`.
 
 ```
 name=s:"John",age=i:30,balance=d:1234.56
@@ -276,7 +280,7 @@ The `<kind>` names are `byte`, `short`, `int`, `uint`, `long`, `ulong`, `float`,
 |----------|-------------|
 | `native_version()` | Version string of the bundled library. |
 | `set_raw_unpack(enable)` | Decode blobs while parsing. Default `False`. |
-| `set_max_depth(depth)` | Maximum nesting depth accepted when parsing. Default 64; values below 1 are treated as 1. |
+| `set_max_depth(depth)` | Maximum nesting depth accepted when parsing. Default 64; values below 1 are treated as 1 and values above 128 as 128. |
 | `deserialize_dump_from_file(path, max_threads=0)` | Same as `FonDump.deserialize_from_file`. |
 
 ### Errors

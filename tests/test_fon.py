@@ -5,6 +5,8 @@ Run with:  python -m unittest discover -s tests
        or: python -m unittest tests.test_fon
 """
 
+import os
+import re
 import unittest
 
 from fon import FonCollection, FonDump, FonError, native_version
@@ -12,8 +14,13 @@ from fon import FonCollection, FonDump, FonError, native_version
 
 class TestNativeVersion(unittest.TestCase):
     def test_version(self) -> None:
-        """native_version() must match the library version."""
-        self.assertEqual(native_version(), "0.4.0")
+        """native_version() must be the version of the native crate in this repository."""
+        manifest: str = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "native", "Cargo.toml")
+        with open(manifest, encoding="utf-8") as handle:
+            declared = re.search(r'^version = "([^"]+)"', handle.read(), re.MULTILINE)
+        self.assertIsNotNone(declared)
+        self.assertRegex(declared.group(1), r"^\d+\.\d+\.\d+$")
+        self.assertEqual(native_version(), declared.group(1))
 
 
 class TestFonCollectionPrimitives(unittest.TestCase):

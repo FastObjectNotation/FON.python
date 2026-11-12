@@ -9,6 +9,7 @@ part of the public API.
 from __future__ import annotations
 
 import ctypes
+import math
 import operator
 import os
 from array import array
@@ -393,8 +394,34 @@ def arg_u64(value: Any) -> c_uint64:
     return c_uint64(_int_in_range(value, 0, UINT64_MAX, "ulong"))
 
 
+def float32_value(value: Any) -> float:
+    """
+    Validate a value for a 32-bit float field.
+
+    A finite number outside the float32 range raises OverflowError; stored as is,
+    it would silently become infinity.
+    """
+    number: float = _float_value(value)
+    if math.isfinite(number) and math.isinf(c_float(number).value):
+        raise OverflowError(f"float value {number} does not fit in 32 bits")
+    return number
+
+
+def bool_value(value: Any) -> int:
+    """Return 1 or 0 for a bool. Anything else raises TypeError: truthiness is not a bool."""
+    if not isinstance(value, bool):
+        raise TypeError(f"expected a bool, got {type(value).__name__}")
+    return 1 if value else 0
+
+
+def int32_saturated(value: Any) -> int:
+    """Clamp an integer into the int32 range, so a huge value keeps its meaning instead of wrapping."""
+    number: int = operator.index(value)
+    return max(-(2 ** 31), min(2 ** 31 - 1, number))
+
+
 def arg_f32(value: Any) -> c_float:
-    return c_float(_float_value(value))
+    return c_float(float32_value(value))
 
 
 def arg_f64(value: Any) -> c_double:
@@ -402,7 +429,7 @@ def arg_f64(value: Any) -> c_double:
 
 
 def arg_bool(value: Any) -> c_int32:
-    return c_int32(1 if value else 0)
+    return c_int32(bool_value(value))
 
 
 def uint64_id(value: Any) -> int:

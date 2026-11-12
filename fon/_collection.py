@@ -408,7 +408,7 @@ class FonCollection:
 
     def add_float_array(self, key: str, values: List[float]) -> None:
         """Add an f32 array. Raises AlreadyExistsError if the key exists."""
-        data, count = _n.pack_array(_n.TC_FLOAT, values)
+        data, count = _n.pack_array(_n.TC_FLOAT, [_n.float32_value(item) for item in values])
         self._native_put(_n.fon_collection_put_float_array, key, _n.FON_PUT_ADD, _n.buffer_address(data), count)
 
     def add_double_array(self, key: str, values: List[float]) -> None:
@@ -418,7 +418,7 @@ class FonCollection:
 
     def add_bool_array(self, key: str, values: List[bool]) -> None:
         """Add a boolean array. Raises AlreadyExistsError if the key exists."""
-        data, count = _n.pack_array(_n.TC_BYTE, [1 if item else 0 for item in values])
+        data, count = _n.pack_array(_n.TC_BYTE, [_n.bool_value(item) for item in values])
         self._native_put(_n.fon_collection_put_bool_array, key, _n.FON_PUT_ADD, _n.buffer_address(data), count)
 
     def add_string_array(self, key: str, values: List[str]) -> None:
@@ -520,7 +520,7 @@ class FonCollection:
 
     def set_float_array(self, key: str, values: List[float]) -> None:
         """Set an f32 array, replacing any existing value under key."""
-        data, count = _n.pack_array(_n.TC_FLOAT, values)
+        data, count = _n.pack_array(_n.TC_FLOAT, [_n.float32_value(item) for item in values])
         self._native_put(_n.fon_collection_put_float_array, key, _n.FON_PUT_UPSERT, _n.buffer_address(data), count)
 
     def set_double_array(self, key: str, values: List[float]) -> None:
@@ -530,7 +530,7 @@ class FonCollection:
 
     def set_bool_array(self, key: str, values: List[bool]) -> None:
         """Set a boolean array, replacing any existing value under key."""
-        data, count = _n.pack_array(_n.TC_BYTE, [1 if item else 0 for item in values])
+        data, count = _n.pack_array(_n.TC_BYTE, [_n.bool_value(item) for item in values])
         self._native_put(_n.fon_collection_put_bool_array, key, _n.FON_PUT_UPSERT, _n.buffer_address(data), count)
 
     def set_string_array(self, key: str, values: List[str]) -> None:

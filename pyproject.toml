@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "FastObjectNotation"
-version = "0.4.0"
+version = "0.5.0"
 description = "Fast Object Notation — a fast, human-readable serialization format"
 license = { text = "MIT" }
 readme = "README.md"
@@ -30,4 +30,4 @@ where = ["."]
 include = ["fon*"]
 
 [tool.setuptools.package-data]
-fon = ["fon_native.*", "libfon_native.*"]
+fon = ["fon_native.*", "libfon_native.*", "py.typed"]

@@ -57,9 +57,10 @@ def set_max_depth(depth: int) -> None:
     """
     Set the maximum nesting depth for deserialization.
 
-    Values below 1 are clamped to 1 by the native library. Default is 64.
+    Values below 1 are clamped to 1 by the native library, and values above 128
+    act as 128. Default is 64.
     """
-    _n.fon_set_max_depth(int(depth))
+    _n.fon_set_max_depth(_n.int32_saturated(depth))
 
 
 __all__ = [

@@ -8,13 +8,12 @@ on:
 
 # Note on distribution:
 #   GitHub Packages does not host a pip-installable registry, so wheels are
-#   attached directly to the GitHub Release. Users can install with:
-#     pip install https://github.com/FastObjectNotation/FON.python/releases/download/v0.3.0/fon-0.3.0-cp313-cp313-win_amd64.whl
-#
-#   For multi-platform wheels (manylinux, macOS universal2, Windows), the
-#   recommended path is cibuildwheel (https://cibuildwheel.pypa.io), which
-#   runs inside CIs Docker containers. The job below uses cibuildwheel to
-#   produce wheels for all major platforms in a single workflow run.
+#   attached directly to the GitHub Release and installed by URL with pip.
+#   cibuildwheel (https://cibuildwheel.pypa.io) builds one wheel per platform
+#   and Python version, and runs the test suite against each installed wheel.
+
+permissions:
+  contents: read
 
 jobs:
   build-wheels:
@@ -30,6 +29,16 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Check that the tag matches the package and the native library
+        shell: bash
+        run: |
+          PACKAGE=$(grep -m1 -oE '^version = "[^"]+"' pyproject.toml | cut -d'"' -f2)
+          NATIVE=$(grep -m1 -oE '^version = "[^"]+"' native/Cargo.toml | cut -d'"' -f2)
+          if [ "v$PACKAGE" != "$GITHUB_REF_NAME" ] || [ "$PACKAGE" != "$NATIVE" ]; then
+            echo "::error::tag $GITHUB_REF_NAME, pyproject.toml $PACKAGE and native/Cargo.toml $NATIVE do not agree"
+            exit 1
+          fi
 
       - name: Set up Rust (needed inside cibuildwheel containers)
         uses: dtolnay/rust-toolchain@stable
@@ -61,6 +70,10 @@ jobs:
           CIBW_BEFORE_BUILD_WINDOWS: >
             cargo build --release --manifest-path {project}/native/Cargo.toml &&
             copy {project}\native\target\release\fon_native.dll {project}\fon\
+          # Run the suite against every installed wheel, so a wheel whose bundled
+          # library is missing or does not load never reaches the release.
+          CIBW_TEST_REQUIRES: pytest
+          CIBW_TEST_COMMAND: "pytest {project}/tests"
 
       - name: Upload wheel artifacts
         uses: actions/upload-artifact@v4
@@ -83,7 +96,12 @@ jobs:
           merge-multiple: true
 
       - name: Create GitHub Release and attach wheels
-        uses: softprops/action-gh-release@v2
-        with:
-          files: wheels/*.whl
-          generate_release_notes: true
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            wheels/*.whl

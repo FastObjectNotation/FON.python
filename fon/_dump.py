@@ -17,10 +17,11 @@ class FonDump:
     An id to collection store. Owns a native dump.
 
     add(), set() and replace() transfer the collection: after a successful call
-    the FonCollection passed in is closed and must not be used. Records returned
-    by get(), indexing and iteration are views that keep this dump alive. A view
-    raises StaleViewError when its record is removed or replaced, or when the
-    record was changed after the view was taken.
+    the FonCollection passed in is closed and must not be used. Iterating a dump
+    yields its ids. Records returned by get(), indexing, values() and items() are
+    views that keep this dump alive. A record view stays valid through edits to
+    its own record and raises StaleViewError once that record is removed or
+    replaced; a nested view goes stale when any field of its record changes.
 
     Not thread-safe: use one dump from one thread at a time. The native library
     does not allow a dump to be mutated while another thread reads or closes it.
@@ -191,7 +192,8 @@ class FonDump:
     def remove_many(self, ids: Any) -> int:
         """Remove several records. Absent and duplicate ids are ignored. Returns the number removed."""
         handle: int = self._ptr()
-        values: Any = [_n.uint64_id(item) for item in ids]
+        # An id outside the uint64 range cannot be in a dump, so it is absent like any other.
+        values: Any = [number for number in (_n.find_id(item) for item in ids) if number is not None]
         data, count = _n.pack_array(_n.TC_ULONG, values)
         removed: int = int(_n.fon_dump_remove_many(handle, _n.buffer_address(data), count))
         self._version += 1
@@ -202,7 +204,7 @@ class FonDump:
     def serialize(self, max_threads: int = 0) -> str:
         """Serialize this dump to a multi-line FON string."""
         handle: int = self._ptr()
-        return _n.take_output(_n.fon_serialize_dump, handle, max_threads).decode("utf-8")
+        return _n.take_output(_n.fon_serialize_dump, handle, _n.int32_saturated(max_threads)).decode("utf-8")
 
     def serialize_to_file(self, path: Any, max_threads: int = 0) -> None:
         """
@@ -218,7 +220,7 @@ class FonDump:
         handle: int = self._ptr()
         path_data: bytes = _n.path_bytes(path)
         err: Any = _n._FonError()
-        rc: int = _n.fon_serialize_to_file(handle, path_data, len(path_data), max_threads, byref(err))
+        rc: int = _n.fon_serialize_to_file(handle, path_data, len(path_data), _n.int32_saturated(max_threads), byref(err))
         _n.check(rc, err)
 
     @classmethod
@@ -226,7 +228,7 @@ class FonDump:
         """Parse a multi-line FON string and return a new owned dump."""
         data: bytes = _n.encode_text(text)
         err: Any = _n._FonError()
-        handle: int = _n.fon_deserialize_dump(data, len(data), max_threads, byref(err))
+        handle: int = _n.fon_deserialize_dump(data, len(data), _n.int32_saturated(max_threads), byref(err))
         handle = _n.require_handle(handle, err, _n.FON_ERROR_PARSE_FAILED)
         return cls._adopt(handle)
 
@@ -235,7 +237,7 @@ class FonDump:
         """Read a FON dump file and return a new owned dump. Raises FonError with FON_ERROR_FILE_NOT_FOUND if missing."""
         path_data: bytes = _n.path_bytes(path)
         err: Any = _n._FonError()
-        handle: int = _n.fon_deserialize_from_file(path_data, len(path_data), max_threads, byref(err))
+        handle: int = _n.fon_deserialize_from_file(path_data, len(path_data), _n.int32_saturated(max_threads), byref(err))
         handle = _n.require_handle(handle, err, _n.FON_ERROR_FILE_NOT_FOUND)
         return cls._adopt(handle)
 
